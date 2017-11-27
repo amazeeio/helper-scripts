@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Template
 metadata:
   creationTimestamp: null
-  name: amazeeio-openshift-template-nginx
+  name: lagoon-openshift-template-nginx
 parameters:
   - name: SERVICE_NAME
     description: Name of this service
@@ -10,20 +10,26 @@ parameters:
   - name: SAFE_BRANCH
     description: Which branch this belongs to, special chars replaced with dashes
     required: true
-  - name: SAFE_SITEGROUP
-    description: Which sitegroup this belongs to, special chars replaced with dashes
+  - name: SAFE_PROJECT
+    description: Which project this belongs to, special chars replaced with dashes
     required: true
   - name: BRANCH
     description: Which branch this belongs to, original value
     required: true
-  - name: SITEGROUP
-    description: Which sitegroup this belongs to, original value
+  - name: PROJECT
+    description: Which project this belongs to, original value
     required: true
-  - name: AMAZEEIO_GIT_SHA
+  - name: LAGOON_GIT_SHA
     description: git hash sha of the current deployment
     required: true
-  - name: ROUTER_URL
-    description: URL of the Router
+  - name: SERVICE_ROUTER_URL
+    description: URL of the Router for this service
+    value: ""
+  - name: OPENSHIFT_PROJECT
+    description: Name of the Project that this service is in
+    required: true
+  - name: REGISTRY
+    description: Registry where Images are pushed to
     required: true
 objects:
 - apiVersion: v1
@@ -32,7 +38,7 @@ objects:
     creationTimestamp: null
     labels:
       branch: ${SAFE_BRANCH}
-      sitegroup: ${SAFE_SITEGROUP}
+      project: ${SAFE_PROJECT}
     name: ${SERVICE_NAME}
   spec:
     replicas: 1
@@ -46,10 +52,10 @@ objects:
         labels:
           service: ${SERVICE_NAME}
           branch: ${SAFE_BRANCH}
-          sitegroup: ${SAFE_SITEGROUP}
+          project: ${SAFE_PROJECT}
       spec:
         containers:
-        - image: ' '
+        - image: ${REGISTRY}/${OPENSHIFT_PROJECT}/${SERVICE_NAME}:latest
           name: ${SERVICE_NAME}
           ports:
           - containerPort: 8080
@@ -60,26 +66,26 @@ objects:
             initialDelaySeconds: 15
             timeoutSeconds: 1
           env:
-            - name: AMAZEEIO_GIT_BRANCH
+            - name: LAGOON_GIT_BRANCH
               valueFrom:
                 configMapKeyRef:
-                  name: amazeeio-env
-                  key: AMAZEEIO_GIT_BRANCH
-            - name: AMAZEEIO_GIT_SAFE_BRANCH
+                  name: lagoon-env
+                  key: LAGOON_GIT_BRANCH
+            - name: LAGOON_GIT_SAFE_BRANCH
               valueFrom:
                 configMapKeyRef:
-                  name: amazeeio-env
-                  key: AMAZEEIO_GIT_SAFE_BRANCH
-            - name: AMAZEEIO_GIT_SHA
+                  name: lagoon-env
+                  key: LAGOON_GIT_SAFE_BRANCH
+            - name: LAGOON_GIT_SHA
               valueFrom:
                 configMapKeyRef:
-                  name: amazeeio-env
-                  key: AMAZEEIO_GIT_SHA
-            - name: AMAZEEIO_SITEGROUP
+                  name: lagoon-env
+                  key: LAGOON_GIT_SHA
+            - name: LAGOON_PROJECT
               valueFrom:
                 configMapKeyRef:
-                  name: amazeeio-env
-                  key: AMAZEEIO_SITEGROUP
+                  name: lagoon-env
+                  key: LAGOON_PROJECT
           resources:
             requests:
               cpu: 100m
@@ -103,7 +109,7 @@ objects:
     labels:
       service: ${SERVICE_NAME}
       branch: ${SAFE_BRANCH}
-      sitegroup: ${SAFE_SITEGROUP}
+      project: ${SAFE_PROJECT}
     name: ${SERVICE_NAME}
   spec:
     ports:
@@ -122,10 +128,10 @@ objects:
     labels:
       service: ${SERVICE_NAME}
       branch: ${SAFE_BRANCH}
-      sitegroup: ${SAFE_SITEGROUP}
+      project: ${SAFE_PROJECT}
     name: ${SERVICE_NAME}
   spec:
-    host: ${SERVICE_NAME}.${ROUTER_URL}
+    host: ${SERVICE_ROUTER_URL}
     port:
       targetPort: 8080-tcp
     to:
