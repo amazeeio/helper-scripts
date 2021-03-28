@@ -56,7 +56,7 @@ kubectl --context="$SOURCE" get pv $(kubectl --context="$DESTINATION" get pv -o=
 # export the Namespace itself, this keeps namespace labels
 kubectl --context="$SOURCE" get ns "$NAMESPACE" -o json > "$NAMESPACE-original-ns.json"
 
-# Scale down all deployments in source namespace, this ensures ReadWriteOnce (ROX) PVs can be mounted by the destination namespace
+# Scale down all deployments in source namespace, this ensures ReadWriteOnce (RWO) PVs can be mounted by the destination namespace
 kubectl --context="$SOURCE" -n "$NAMESPACE" scale  deployment --all --replicas=0
 
 # Create target Namespace
