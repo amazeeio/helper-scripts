@@ -96,4 +96,7 @@ if [[ ! -z "$DESTINATION_NAMESPACE_PVS" ]]; then
 fi
 
 # Remove the metadata/annotations/kubectl.kubernetes.io/last-applied-configuration annotation of lagoon managed objects, as they could cuase an error the next time we lagoon deploy
-kubectl --context="$DESTINATION" -n "$NAMESPACE" patch $(kubectl --context="$DESTINATION" -n "$NAMESPACE" -l lagoon.sh/project get service,deployment,secret,ingress,configmap,cronjobs,mariadbconsumers,mongodbconsumers,postgresqlconsumers,horizontalpodautoscalers,poddisruptionbudgets -o name) --type json -p '[{"op": "remove", "path": "/metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration"}]'
+LAGOON_MANAGED_RESOURCES=$(kubectl --context="$DESTINATION" -n "$NAMESPACE" -l lagoon.sh/project get service,deployment,secret,ingress,configmap,cronjobs,mariadbconsumers,mongodbconsumers,postgresqlconsumers,horizontalpodautoscalers,poddisruptionbudgets -o name)
+if [[ ! -z "$LAGOON_MANAGED_RESOURCES" ]]; then
+  kubectl --context="$DESTINATION" -n "$NAMESPACE" patch $LAGOON_MANAGED_RESOURCES --type json -p '[{"op": "remove", "path": "/metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration"}]'
+fi
