@@ -66,7 +66,7 @@ kubectl --context="$SOURCE" get ns "$NAMESPACE" -o json > "$NAMESPACE-original-n
 
 if [ "${SKIP_SOURCE_SCALEDOWN}" != "skip" ]; then
   # Scale down all deployments in source namespace, this ensures ReadWriteOnce (RWO) PVs can be mounted by the destination namespace
-  echo kubectl --context="$SOURCE" -n "$NAMESPACE" scale  deployment --all --replicas=0
+  kubectl --context="$SOURCE" -n "$NAMESPACE" scale  deployment --all --replicas=0
 fi
 
 # Create target Namespace
