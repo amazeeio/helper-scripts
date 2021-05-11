@@ -52,7 +52,7 @@ set -v
 
 # Export all objectes
 # Important: child objects like Pods are not exported as they are created again when the Parent object is created
-echo "configmaps persistentvolumeclaims secrets services deployments.apps statefulsets horizontalpodautoscalers.autoscaling poddisruptionbudgets cronjobs.batch certificates.cert-manager.io  mariadbconsumers.mariadb.amazee.io mongodbconsumers.mongodb.amazee.io postgresqlconsumers.postgres.amazee.io rolebindings.rbac.authorization.k8s.io roles.rbac.authorization.k8s.io" | xargs -n 1 \
+echo "configmaps persistentvolumeclaims secrets services deployments.apps statefulsets horizontalpodautoscalers poddisruptionbudgets cronjobs.batch certificates.cert-manager.io  mariadbconsumers.mariadb.amazee.io mongodbconsumers.mongodb.amazee.io postgresqlconsumers.postgres.amazee.io rolebindings.rbac.authorization.k8s.io roles.rbac.authorization.k8s.io" | xargs -n 1 \
   kubectl --context="$SOURCE" get -n "$NAMESPACE" -o json > "$NAMESPACE-original.json"
 
 # Export Ingress, we need them separately later
