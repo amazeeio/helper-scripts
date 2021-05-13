@@ -3,8 +3,8 @@
 set -eu -o pipefail
 
 #
-# Migrate Namespace between two Kubernetes Clusters, this is tested for ASK where it's easily possible to mount persistent storage from two clusters in the same region
-# this might not work for EKS or GKE.
+# Migrate Namespace between two Kubernetes Clusters, this is tested for AKS where it's easily possible to mount persistent storage from two clusters in the same region.
+# This might not work for EKS or GKE.
 #
 # Prework needed for this to work
 # - add vnet of destination cluster to databases access (or the destination namespace will not be able to talk to the DataBases)
@@ -50,7 +50,7 @@ fi
 
 set -v
 
-# Export all objectes
+# Export all objects
 # Important: child objects like Pods are not exported as they are created again when the Parent object is created
 echo "configmaps persistentvolumeclaims secrets services deployments.apps statefulsets horizontalpodautoscalers poddisruptionbudgets cronjobs.batch certificates.cert-manager.io  mariadbconsumers.mariadb.amazee.io mongodbconsumers.mongodb.amazee.io postgresqlconsumers.postgres.amazee.io rolebindings.rbac.authorization.k8s.io roles.rbac.authorization.k8s.io" | xargs -n 1 \
   kubectl --context="$SOURCE" get -n "$NAMESPACE" -o json > "$NAMESPACE-original.json"
