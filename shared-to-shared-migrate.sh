@@ -225,7 +225,7 @@ shw_norm "================================================"
 # Alter the network service(s).
 shw_info "> Altering the Network Service $DB_NETWORK_SERVICE to point at $DESTINATION_CLUSTER"
 shw_info "================================================"
-ORIGINAL_DB_HOST=$(oc -n "$NAMESPACE" get "svc/$DB_NETWORK_SERVICE" -o json --export | tee "/tmp/$NAMESPACE-svc.json" | jq -er '.spec.externalName')
+ORIGINAL_DB_HOST=$(oc -n "$NAMESPACE" get "svc/$DB_NETWORK_SERVICE" -o json | tee "/tmp/$NAMESPACE-svc.json" | jq -er '.spec.externalName')
 if [ "$DRY_RUN" ] ; then
   echo "**DRY RUN**"
 else
@@ -234,7 +234,7 @@ fi
 if [ "$DB_READREPLICA_HOSTS" ]; then
   shw_info "> Altering the Network Service $DB_READREPLICA_HOSTS to point at $REPLICA_CLUSTER"
   shw_info "================================================"
-  ORIGINAL_DB_READREPLICA_HOSTS=$(oc -n "$NAMESPACE" get "svc/$DB_READREPLICA_HOSTS" -o json --export | tee "/tmp/$NAMESPACE-svc-replica.json" | jq -er '.spec.externalName')
+  ORIGINAL_DB_READREPLICA_HOSTS=$(oc -n "$NAMESPACE" get "svc/$DB_READREPLICA_HOSTS" -o json | tee "/tmp/$NAMESPACE-svc-replica.json" | jq -er '.spec.externalName')
   if [ "$DRY_RUN" ] ; then
     echo "**DRY RUN**"
   else
