@@ -206,7 +206,7 @@ if [ -z "$POD" ]; then
 fi
 shw_info "> Dumping database $DB_NAME on pod $POD on host $DB_NETWORK_SERVICE"
 shw_info "================================================"
-oc -n "$NAMESPACE" exec "$POD" -- bash -c "time mysqldump -h '$DB_NETWORK_SERVICE' -u '$DB_USER' -p'$DB_PASSWORD' '$DB_NAME' > /tmp/migration.sql"
+oc -n "$NAMESPACE" exec "$POD" -- bash -c "time mysqldump --max-allowed-packet=500M --events --routines --quick --add-locks --no-autocommit --single-transaction --no-create-db -h '$DB_NETWORK_SERVICE' -u '$DB_USER' -p'$DB_PASSWORD' '$DB_NAME' > /tmp/migration.sql"
 oc -n "$NAMESPACE" exec "$POD" -- ls -lh /tmp/migration.sql
 oc -n "$NAMESPACE" exec "$POD" -- head -n 5 /tmp/migration.sql
 oc -n "$NAMESPACE" exec "$POD" -- tail -n 5 /tmp/migration.sql
