@@ -75,7 +75,7 @@ IO.readlines(options[:file], chomp: true).each do |project|
 
   puts "\ngetting targeted namespaces contents:"
   list_cmds = env_namespaces.map do |ns|
-    ['kubectl', '--context', options[:source], '-n', ns.delete_prefix('namespace/'), 'get', 'all']
+    ['kubectl', '--context', options[:source], '-n', ns.delete_prefix('namespace/'), 'get', 'all,pvc']
   end
   safe_run_cmds(list_cmds)
 
