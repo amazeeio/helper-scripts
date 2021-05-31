@@ -68,7 +68,7 @@ namespaces = stdout.split
 # enumerate projects from file
 IO.readlines(options[:file], chomp: true).each do |project|
   # filter namespaces for project
-  env_namespaces = namespaces.grep(/^namespace\/#{project}/)
+  env_namespaces = namespaces.grep(/^namespace\/#{project}-/)
 
   puts "\ntargeted namespaces:"
   puts env_namespaces
