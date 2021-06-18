@@ -8,7 +8,7 @@
 # * avoid duplicate cronjobs running via either CLI pods or native cronjobs
 # * reduce number of pods running in the source cluster
 #
-# The script performs two actions on the namespaces associated with the given list of projects.
+# The script performs these actions on the namespaces associated with the given list of projects.
 #
 # 1. scale down all deployments
 # 2. suspend all k8s native cronjobs
