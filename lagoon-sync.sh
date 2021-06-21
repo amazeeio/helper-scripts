@@ -54,11 +54,11 @@ set -v
 
 mkdir -p /tmp/lagoon-sync/backup
 
-oc login $SOURCE_CONSOLE --token=$SOURCE_SERVICEACCOUNT_TOKEN
-source_context=$(oc config current-context)
+oc --insecure-skip-tls-verify login $SOURCE_CONSOLE --token=$SOURCE_SERVICEACCOUNT_TOKEN
+source_context=$(oc --insecure-skip-tls-verify config current-context)
 
-oc login $DESTINATION_CONSOLE --token=$DESTINATION_SERVICEACCOUNT_TOKEN
-destination_context=$(oc config current-context)
+oc --insecure-skip-tls-verify login $DESTINATION_CONSOLE --token=$DESTINATION_SERVICEACCOUNT_TOKEN
+destination_context=$(oc --insecure-skip-tls-verify config current-context)
 
 source_api_db_pod=$(oc --insecure-skip-tls-verify --context=$source_context -n $SOURCE_NAMESPACE get pod -o custom-columns=NAME:.metadata.name --no-headers -l service=api-db)
 oc --insecure-skip-tls-verify --context=$source_context -n $SOURCE_NAMESPACE exec $source_api_db_pod -- /lagoon/mysql-backup.sh 127.0.0.1 || true
