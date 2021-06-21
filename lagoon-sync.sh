@@ -60,32 +60,32 @@ source_context=$(oc config current-context)
 oc login $DESTINATION_CONSOLE --token=$DESTINATION_SERVICEACCOUNT_TOKEN
 destination_context=$(oc config current-context)
 
-source_api_db_pod=$(oc --context=$source_context -n $SOURCE_NAMESPACE get pod -o custom-columns=NAME:.metadata.name --no-headers -l service=api-db)
-oc --context=$source_context -n $SOURCE_NAMESPACE exec $source_api_db_pod -- /lagoon/mysql-backup.sh 127.0.0.1 || true
-source_api_db_backup=$(oc --context=$source_context -n $SOURCE_NAMESPACE exec $source_api_db_pod -- sh -c "find . -name \"*.sql.gz\" -print0 | xargs -r -0 ls -1 -t | head -1")
-oc --context=$source_context -n $SOURCE_NAMESPACE exec $source_api_db_pod -- cat $source_api_db_backup > /tmp/lagoon-sync/$source_api_db_backup
+source_api_db_pod=$(oc --insecure-skip-tls-verify --context=$source_context -n $SOURCE_NAMESPACE get pod -o custom-columns=NAME:.metadata.name --no-headers -l service=api-db)
+oc --insecure-skip-tls-verify --context=$source_context -n $SOURCE_NAMESPACE exec $source_api_db_pod -- /lagoon/mysql-backup.sh 127.0.0.1 || true
+source_api_db_backup=$(oc --insecure-skip-tls-verify --context=$source_context -n $SOURCE_NAMESPACE exec $source_api_db_pod -- sh -c "find . -name \"*.sql.gz\" -print0 | xargs -r -0 ls -1 -t | head -1")
+oc --insecure-skip-tls-verify --context=$source_context -n $SOURCE_NAMESPACE exec $source_api_db_pod -- cat $source_api_db_backup > /tmp/lagoon-sync/$source_api_db_backup
 
 
-destination_api_db_pod=$(oc --context=$destination_context -n $DESTINATION_NAMESPACE get pod -o custom-columns=NAME:.metadata.name --no-headers -l service=api-db)
-oc --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_api_db_pod -- sh -c "mkdir -p backup"
-oc --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_api_db_pod -- sh -c "cat > $source_api_db_backup" < /tmp/lagoon-sync/$source_api_db_backup
-oc --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_api_db_pod -- sh -c "zcat $source_api_db_backup | mysql infrastructure"
+destination_api_db_pod=$(oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE get pod -o custom-columns=NAME:.metadata.name --no-headers -l 'app.kubernetes.io/component=lagoon-core-api-db')
+oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_api_db_pod -- sh -c "mkdir -p backup"
+oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_api_db_pod -- sh -c "cat > $source_api_db_backup" < /tmp/lagoon-sync/$source_api_db_backup
+oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_api_db_pod -- sh -c "zcat $source_api_db_backup | mysql infrastructure"
 
 
-source_keycloak_db_pod=$(oc --context=$source_context -n $SOURCE_NAMESPACE get pod -o custom-columns=NAME:.metadata.name --no-headers -l service=keycloak-db)
-oc --context=$source_context -n $SOURCE_NAMESPACE exec $source_keycloak_db_pod -- /lagoon/mysql-backup.sh 127.0.0.1
-source_keycloak_db_backup=$(oc --context=$source_context -n $SOURCE_NAMESPACE exec $source_keycloak_db_pod -- sh -c "find . -name \"*.sql.gz\" -print0 | xargs -r -0 ls -1 -t | head -1")
-oc --context=$source_context -n $SOURCE_NAMESPACE exec $source_keycloak_db_pod -- cat $source_keycloak_db_backup > /tmp/lagoon-sync/$source_keycloak_db_backup
+source_keycloak_db_pod=$(oc --insecure-skip-tls-verify --context=$source_context -n $SOURCE_NAMESPACE get pod -o custom-columns=NAME:.metadata.name --no-headers -l service=keycloak-db)
+oc --insecure-skip-tls-verify --context=$source_context -n $SOURCE_NAMESPACE exec $source_keycloak_db_pod -- /lagoon/mysql-backup.sh 127.0.0.1
+source_keycloak_db_backup=$(oc --insecure-skip-tls-verify --context=$source_context -n $SOURCE_NAMESPACE exec $source_keycloak_db_pod -- sh -c "find . -name \"*.sql.gz\" -print0 | xargs -r -0 ls -1 -t | head -1")
+oc --insecure-skip-tls-verify --context=$source_context -n $SOURCE_NAMESPACE exec $source_keycloak_db_pod -- cat $source_keycloak_db_backup > /tmp/lagoon-sync/$source_keycloak_db_backup
 
-destination_keycloak_db_pod=$(oc --context=$destination_context -n $DESTINATION_NAMESPACE get pod -o custom-columns=NAME:.metadata.name --no-headers -l service=keycloak-db)
-oc --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_keycloak_db_pod -- sh -c "mkdir -p backup"
-oc --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_keycloak_db_pod -- sh -c "cat > $source_keycloak_db_backup" < /tmp/lagoon-sync/$source_keycloak_db_backup
-oc --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_keycloak_db_pod -- sh -c "zcat $source_keycloak_db_backup | mysql keycloak"
+destination_keycloak_db_pod=$(oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE get pod -o custom-columns=NAME:.metadata.name --no-headers -l 'app.kubernetes.io/component=lagoon-core-keycloak-db')
+oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_keycloak_db_pod -- sh -c "mkdir -p backup"
+oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_keycloak_db_pod -- sh -c "cat > $source_keycloak_db_backup" < /tmp/lagoon-sync/$source_keycloak_db_backup
+oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_keycloak_db_pod -- sh -c "zcat $source_keycloak_db_backup | mysql keycloak"
 
 
-oc --context=$destination_context -n $DESTINATION_NAMESPACE rollout latest dc/keycloak
-oc --context=$destination_context -n $DESTINATION_NAMESPACE rollout latest dc/api
+oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE rollout latest dc/keycloak
+oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE rollout latest dc/api
 
-oc --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_api_db_pod -- /rerun_initdb.sh
+oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_api_db_pod -- /rerun_initdb.sh
 
 
