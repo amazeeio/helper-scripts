@@ -83,8 +83,8 @@ oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAM
 oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_keycloak_db_pod -- sh -c "zcat $source_keycloak_db_backup | mysql keycloak"
 
 
-oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE rollout latest deploy/keycloak
-oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE rollout latest deploy/api
+oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE rollout latest deploy/lagoon-core-keycloak
+oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE rollout latest deploy/lagoon-core-api
 
 oc --insecure-skip-tls-verify --context=$destination_context -n $DESTINATION_NAMESPACE exec -i $destination_api_db_pod -- /rerun_initdb.sh
 
