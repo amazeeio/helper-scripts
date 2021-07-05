@@ -206,7 +206,7 @@ if [ -z "$POD" ]; then
 fi
 shw_info "> Dumping database $DB_NAME on pod $POD on host $DB_NETWORK_SERVICE"
 shw_info "================================================"
-oc -n "$NAMESPACE" exec "$POD" -- bash -c "time mysqldump --max-allowed-packet=500M --events --routines --quick --add-locks --no-autocommit --single-transaction --no-create-db -h '$DB_NETWORK_SERVICE' -u '$DB_USER' -p'$DB_PASSWORD' '$DB_NAME' > /tmp/migration.sql"
+oc -n "$NAMESPACE" exec "$POD" -- bash -c "time mysqldump --max-allowed-packet=500M --events --routines --quick --add-locks --no-autocommit --single-transaction --no-create-db --no-tablespaces -h '$DB_NETWORK_SERVICE' -u '$DB_USER' -p'$DB_PASSWORD' '$DB_NAME' > /tmp/migration.sql"
 oc -n "$NAMESPACE" exec "$POD" -- ls -lh /tmp/migration.sql
 oc -n "$NAMESPACE" exec "$POD" -- head -n 5 /tmp/migration.sql
 oc -n "$NAMESPACE" exec "$POD" -- tail -n 5 /tmp/migration.sql
@@ -261,8 +261,8 @@ ROUTE=$(oc -n "$NAMESPACE" get routes -o json | jq -er '.items[0].spec.host')
 shw_info "> Testing the route https://${ROUTE}/?${TIMESTAMP}"
 shw_info "================================================"
 curl -skLIXGET "https://${ROUTE}/?${TIMESTAMP}" \
-  -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36" \
-  --cookie "NO_CACHE=1" | grep -E "HTTP|Cache|Location|LAGOON" || true
+  -A 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36' \
+  --cookie "NO_CACHE=1" | grep -iE "HTTP|Cache|Location|LAGOON" || true
 
 shw_grey "================================================"
 shw_grey ""
