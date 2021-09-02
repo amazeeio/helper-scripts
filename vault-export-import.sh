@@ -44,12 +44,12 @@ vault login -address=$SOURCE_VAULT_ADDR $SOURCE_VAULT_TOKEN > /dev/null
 
 vault_base="clusters/kv/${SOURCE_TENANT_ID}/${SOURCE_CLUSTER_ID}"
 
-vault kv list -address=$SOURCE_VAULT_ADDR  "$vault_base"  | \
+vault kv list -format=json -address=$SOURCE_VAULT_ADDR  "$vault_base"  | \
 jq -r '.[]' | \
 grep -v -e '^steward$' | \
 while read -r key; do
   echo "exporting $SOURCE_CLUSTER_ID/$key"
-  vault  kv get -address=$SOURCE_VAULT_ADDR "${vault_base}/${key}" | \
+  vault kv get -format=json -address=$SOURCE_VAULT_ADDR "${vault_base}/${key}" | \
     jq -r '.data.data' > "$SOURCE_CLUSTER_ID/${key}.json"
 done
 
