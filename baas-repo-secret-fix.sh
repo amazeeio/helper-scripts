@@ -11,62 +11,113 @@
 #
 
 DRY_RUN="${DRY_RUN:-"true"}"
+ONLY_SHOW_BROKEN="${ONLY_SHOW_BROKEN:-"false"}"
 
 # Some variables
 PROJECT_SECRET="${PROJECT_SECRET:-""}"
 
-if [ -z $PROJECT_SECRET ]; then
+if [ -z $PROJECT_SECRET ]
+then
     echo PROJECT_SECRET not defined
     exit 1
 fi
 
+echo "Getting inofrmation from the k8s cluster..."
+
+# Get all baas-repo-pw values from the cluster for all namespaces
+ALL_BAAS_REPO_PWS=$(kubectl get secret --all-namespaces --field-selector type=Opaque --field-selector metadata.name=baas-repo-pw --output json | jq '.items | [ map(.) | .[] | {(.metadata.namespace): {"repo-pw": .data."repo-pw"}}] | add')
+# Output should be "{<namespace_name>: {repo_pw: <repo_password>}, ...}"
+
+#ALL_BAAS_REPO_PWS=$(kubectl get secret --all-namespaces --field-selector type=Opaque --field-selector metadata.name=baas-repo-pw --output json | jq '.items | [ map(.) | .[] | {"repo-pw": .data."repo-pw", "namespace": .metadata.namespace}]')
+# Output should be "[{repo_pw: <repo_password>, namespace: <namespace_name>}, ...]"
+
+# Get all project names from the cluster for all namespaces
+ALL_NS_PROJECTS=$(kubectl get namespaces -l lagoon.sh/project -o json | jq '.items | [ map(.) | .[] | {(.metadata.name): {project: .metadata.labels."lagoon.sh/project", namespace: .metadata.name}}] | add')
+# Output should be "{<namespace_name>: {project: <lagoon_project>,  namespace: <namespace_name>}, ...}"
+
+# Get all project names from the cluster for all namespaces
+#ALL_NS_PROJECTS=$(kubectl get namespaces -l lagoon.sh/project -o json | jq '.items | [ map(.) | .[] | { project: .metadata.labels."lagoon.sh/project", namespace: .metadata.name}]')
+# Output should be "[{project: <project>, namespace: <namespace_name>}, ...]"
+
+ALL_PWS_WITH_PROJECTS=$(echo ${ALL_BAAS_REPO_PWS} ${ALL_NS_PROJECTS} | jq -s '.[0] * .[1]')
+
 LAGOON_PROJECTS=()
-for lp in $(kubectl get namespaces -l lagoon.sh/project -o json | jq -r '.items | .[].metadata.labels."lagoon.sh/project"' | sort -u)
+BAD_PROJECTS=()
+BAD_NAMESPACES=()
+# Iterate over each ns and determine which ones need to be fixed
+for ns in $(echo ${ALL_PWS_WITH_PROJECTS} | jq -r 'keys[]')
 do
-    PROJECT_NAME=$lp
-    echo "> checking environments for project $PROJECT_NAME"
+    PROJECT_NAME=$(echo ${ALL_PWS_WITH_PROJECTS} | jq -r ".\"${ns}\".project")
+    NS_BAAS_REPO_PW_B64=$(echo ${ALL_PWS_WITH_PROJECTS} | jq -r ".\"${ns}\".\"repo-pw\"")
+    NS_BAAS_REPO_PW=$(echo -n ${NS_BAAS_REPO_PW_B64} | base64 -d)
     BAAS_REPO_PW=$(echo -n "$(echo -n "${PROJECT_NAME}-${PROJECT_SECRET}" | sha256sum | awk '{print $1}')-BAAS-REPO-PW" | sha256sum | awk '{print $1}')
-    BAAS_REPO_PW_B64=$(echo -n "${BAAS_REPO_PW}" | base64)
-    PROJECT_NAMESPACES=($(kubectl get namespaces -l lagoon.sh/project=$PROJECT_NAME --no-headers | awk '{print $1}'))
-    NUM_NAMESPACES=${#PROJECT_NAMESPACES[@]}
-    COUNT=0
-    NAMESPACES_TO_FIX=()
-    for ns in ${PROJECT_NAMESPACES[@]}
-    do
-        echo "=> checking $ns"
-        if kubectl -n ${ns} get secret baas-repo-pw &> /dev/null
+    BAAS_REPO_PW_B64=$(echo -n ${BAAS_REPO_PW} | base64)
+
+    if [ ${NS_BAAS_REPO_PW_B64} == "null" ]
+    then
+        # If we get here, the namespace is missing a `baas-repo-pw`, and can be ignored altogether
+        if [ "${ONLY_SHOW_BROKEN}" == "false" ]
         then
-            NS_BAAS_REPO_PW_B64=$(kubectl -n $ns get secret baas-repo-pw -o json | jq -r '.data."repo-pw"')
-            if [ "${BAAS_REPO_PW_B64}" != "${NS_BAAS_REPO_PW_B64}" ]
-            then
-                echo "   baas-repo-pw in $ns differs"
-                echo "   should be:    ${BAAS_REPO_PW_B64}"
-                echo "   currently is: ${NS_BAAS_REPO_PW_B64}"
-                NAMESPACES_TO_FIX+=($ns)
-            else
-                echo "   $ns is ok"
-                ((COUNT=COUNT+1))
-            fi
+            echo "=> ${ns} is missing a value and can be ignored!"
         fi
-    done
-    if [ "$COUNT" == "0" ]
-    then
-        LAGOON_PROJECTS+=($PROJECT_NAME)
-    elif [ "$COUNT" != "$NUM_NAMESPACES" ]
-    then
-        for ns in ${NAMESPACES_TO_FIX[@]}
-        do
-            if [ "${DRY_RUN}" == "false" ]
-            then
-                echo "==> fixing $ns baas-repo-pw"
-                kubectl -n $ns patch secret baas-repo-pw --type='json' -p='[{"op":"replace" ,"path":"/data/repo-pw" ,"value":"'${BAAS_REPO_PW_B64}'"}]'
-            else
-                echo "==> secret would be fixed if DRY_RUN=false"
-            fi
-        done
+    elif [ "${NS_BAAS_REPO_PW_B64}" != "${BAAS_REPO_PW_B64}" ]
+    then   
+        # If we get this far, we know this namespace has a `baas-repo-pw` secret set, and it's different than we expected
+
+        echo "=> ${ns} has an issue!"
+        echo "   baas-repo-pw in ${ns} differs"
+        echo -n "   should be:    ${BAAS_REPO_PW_B64} / "
+        echo -n "${BAAS_REPO_PW_B64}" | base64 -d 
+        echo ""
+        echo "   currently is: ${NS_BAAS_REPO_PW_B64} / "
+        echo -n "${NS_BAAS_REPO_PW_B64}" | base64 -d
+        echo ""
+
+        # Add this namespace name to array of Lagoon project names with incorrect secret values
+        BAD_PROJECTS+=($PROJECT_NAME)
+
+        # Add this namespace name to array of namespaces with incorrect secret values
+        BAD_NAMESPACES+=($ns)
+        
+        # Actually fix the issue (if flag is set)
+        if [ "${DRY_RUN}" == "false" ]
+        then
+            echo "==> Fixing baas-repo-pw secret value for ${ns}"
+            kubectl -n $ns patch secret baas-repo-pw --type='json' -p='[{"op":"replace" ,"path":"/data/repo-pw" ,"value":"'${BAAS_REPO_PW_B64}'"}]'
+        else
+            echo "==> Secret would be fixed if DRY_RUN=false"
+        fi
+    else
+        # If we get here, we know this namespace has a `baas-repo-pw` set, and it's correct
+        if [ "${ONLY_SHOW_BROKEN}" == "false" ]
+        then
+            echo "=> ${ns} is setup correctly!"
+        fi
     fi
 done
-for lp in ${LAGOON_PROJECTS[@]}
+
+echo "Checking for totally wrong projects..."
+# Filter the BAD_PROJECTS array to ensure all values are unique
+BAD_PROJECTS_UNIQUE=$(echo "${BAD_PROJECTS[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+for lp in ${BAD_PROJECTS_UNIQUE[@]}
 do
-    echo "> $lp had all incorrect baas-repo-pws, will need to be fixed manually by changing the restic repo password"
+    # Get a list of all cluster namespaces applicable to this project
+    PROJECT_NAMESPACES=$(echo ${ALL_PWS_WITH_PROJECTS} | jq -r ".[] | .. | select(.project? | test(\"^${lp}$\")) | .namespace")
+
+    # Check all namespaces for this project to see if any have the correct secret value set
+    CORRECT="false"
+    for proj_ns in ${PROJECT_NAMESPACES[@]}
+    do
+        if [[ ! " ${BAD_NAMESPACES[*]} " =~ " ${proj_ns} " ]]
+        then
+            # At least one namespace has the correct secret value set
+            CORRECT="true"
+        fi
+    done
+
+    # If no namespaces have the correct secret value set, we need to mark this project as a project which has all incorrect values set (meaning the restic repo keys will need to be updated)
+    if [ ${CORRECT} == "false" ]
+    then
+        echo "> ${lp} has all incorrect baas-repo-pws, will need to be fixed manually by changing the restic repo password"
+    fi
 done
