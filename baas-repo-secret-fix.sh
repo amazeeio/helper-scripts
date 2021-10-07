@@ -44,7 +44,7 @@ ALL_PWS_WITH_PROJECTS=$(echo ${ALL_BAAS_REPO_PWS} ${ALL_NS_PROJECTS} | jq -s '.[
 LAGOON_PROJECTS=()
 BAD_PROJECTS=()
 BAD_NAMESPACES=()
-# Iterate over each ns and determine which ones need to be fixed
+# Iterate over each ns and determine which ones are bad
 for ns in $(echo ${ALL_PWS_WITH_PROJECTS} | jq -r 'keys[]')
 do
     PROJECT_NAME=$(echo ${ALL_PWS_WITH_PROJECTS} | jq -r ".\"${ns}\".project")
@@ -64,29 +64,11 @@ do
     then   
         # If we get this far, we know this namespace has a `baas-repo-pw` secret set, and it's different than we expected
 
-        echo "=> ${ns} has an issue!"
-        echo "   baas-repo-pw in ${ns} differs"
-        echo -n "   should be:    ${BAAS_REPO_PW_B64} / "
-        echo -n "${BAAS_REPO_PW_B64}" | base64 -d 
-        echo ""
-        echo "   currently is: ${NS_BAAS_REPO_PW_B64} / "
-        echo -n "${NS_BAAS_REPO_PW_B64}" | base64 -d
-        echo ""
-
         # Add this namespace name to array of Lagoon project names with incorrect secret values
         BAD_PROJECTS+=($PROJECT_NAME)
 
         # Add this namespace name to array of namespaces with incorrect secret values
         BAD_NAMESPACES+=($ns)
-        
-        # Actually fix the issue (if flag is set)
-        if [ "${DRY_RUN}" == "false" ]
-        then
-            echo "==> Fixing baas-repo-pw secret value for ${ns}"
-            kubectl -n $ns patch secret baas-repo-pw --type='json' -p='[{"op":"replace" ,"path":"/data/repo-pw" ,"value":"'${BAAS_REPO_PW_B64}'"}]'
-        else
-            echo "==> Secret would be fixed if DRY_RUN=false"
-        fi
     else
         # If we get here, we know this namespace has a `baas-repo-pw` set, and it's correct
         if [ "${ONLY_SHOW_BROKEN}" == "false" ]
@@ -96,8 +78,9 @@ do
     fi
 done
 
-echo "Checking for totally wrong projects..."
 # Filter the BAD_PROJECTS array to ensure all values are unique
+NOT_TOTALLY_WRONG_NAMESPACES=()
+echo "Checking for totally wrong projects..."
 BAD_PROJECTS_UNIQUE=$(echo "${BAD_PROJECTS[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' ')
 for lp in ${BAD_PROJECTS_UNIQUE[@]}
 do
@@ -119,5 +102,43 @@ do
     if [ ${CORRECT} == "false" ]
     then
         echo "> ${lp} has all incorrect baas-repo-pws, will need to be fixed manually by changing the restic repo password"
+    else
+        # Identify any namespaces which have a wrong password secret, but do not belong to a Lagoon project with envs which all have incorrect passwords secret values
+        for proj_ns in ${PROJECT_NAMESPACES[@]}
+        do
+            if [[ " ${BAD_NAMESPACES[*]} " =~ " ${proj_ns} " ]]
+            then
+                NOT_TOTALLY_WRONG_NAMESPACES+=($proj_ns)
+            fi
+        done
+    fi
+done
+
+# Iterate over the bad namspaces and print out those which have at least one environment set correctly
+for ns in ${NOT_TOTALLY_WRONG_NAMESPACES[@]}
+do
+    PROJECT_NAME=$(echo ${ALL_PWS_WITH_PROJECTS} | jq -r ".\"${ns}\".project")
+    NS_BAAS_REPO_PW_B64=$(echo ${ALL_PWS_WITH_PROJECTS} | jq -r ".\"${ns}\".\"repo-pw\"")
+    NS_BAAS_REPO_PW=$(echo -n ${NS_BAAS_REPO_PW_B64} | base64 -d)
+    BAAS_REPO_PW=$(echo -n "$(echo -n "${PROJECT_NAME}-${PROJECT_SECRET}" | sha256sum | awk '{print $1}')-BAAS-REPO-PW" | sha256sum | awk '{print $1}')
+    BAAS_REPO_PW_B64=$(echo -n ${BAAS_REPO_PW} | base64)
+
+    # No testing needed, as we've already done that elsewhere
+    echo "=> ${ns} has an issue!"
+    echo "   baas-repo-pw in ${ns} differs"
+    echo -n "   should be:    ${BAAS_REPO_PW_B64} / "
+    echo -n "${BAAS_REPO_PW_B64}" | base64 -d 
+    echo ""
+    echo "   currently is: ${NS_BAAS_REPO_PW_B64} / "
+    echo -n "${NS_BAAS_REPO_PW_B64}" | base64 -d
+    echo ""
+
+    # Actually fix the issue (if flag is set)
+    if [ "${DRY_RUN}" == "false" ]
+    then
+        echo "==> Fixing baas-repo-pw secret value for ${ns}"
+        kubectl -n $ns patch secret baas-repo-pw --type='json' -p='[{"op":"replace" ,"path":"/data/repo-pw" ,"value":"'${BAAS_REPO_PW_B64}'"}]'
+    else
+        echo "==> Secret would be fixed if DRY_RUN=false"
     fi
 done
