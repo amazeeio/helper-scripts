@@ -181,7 +181,7 @@ mysql --defaults-file="$CONF_FILE" -se "CREATE DATABASE IF NOT EXISTS \\\`${DB_N
 echo "Creating user"
 mysql --defaults-file="$CONF_FILE" -se "CREATE USER IF NOT EXISTS \\\`${DB_USER}\\\`@'%' IDENTIFIED BY '${DB_PASSWORD}';"
 echo "Grants"
-mysql --defaults-file="$CONF_FILE" -se "GRANT ALL ON \\\`${DB_NAME}\\\`.* TO \\\`${DB_USER}\\\`@'%';"
+mysql --defaults-file="$CONF_FILE" -se "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, INDEX, ALTER, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, EVENT, TRIGGER ON \\\`${DB_NAME}\\\`.* TO \\\`${DB_USER}\\\`@'%';"
 echo "Flush"
 mysql --defaults-file="$CONF_FILE" -se "FLUSH PRIVILEGES;"
 echo "Verify access"
