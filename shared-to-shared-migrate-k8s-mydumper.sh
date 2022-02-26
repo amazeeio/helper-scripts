@@ -175,7 +175,7 @@ if [ -z "$POD" ]; then
 	shw_info "No running mydumper pod in namespace $NAMESPACE"
 	shw_info "Creating MyDumper"
   kubectl -n "$NAMESPACE" create deploy --image=schnitzel/docker-mydumper mydumper -- sh -c 'while sleep 3600; do :; done'
-	sleep 60 # hope for timely scheduling
+  kubectl -n "$NAMESPACE" wait deploy/mydumper --for condition=available --timeout=300s
 	POD=$(kubectl -n "$NAMESPACE" get pods -o json --field-selector=status.phase=Running -l app=mydumper | jq -er '.items[0].metadata.name')
 fi
 
