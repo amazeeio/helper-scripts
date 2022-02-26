@@ -33,6 +33,7 @@ set -euo pipefail
 
 # Initialize our own variables:
 DESTINATION_PROVIDER=""
+DESTINATION_DBAAS_OPERATOR_NAMESPACE="dbaas-operator"
 NAMESPACE=""
 CONSUMER="mariadb"
 DRY_RUN=""
@@ -78,6 +79,11 @@ while [[ $# -gt 0 ]] ; do
     shift # past argument
     shift # past value
     ;;
+    -o|--operator)
+    DESTINATION_DBAAS_OPERATOR_NAMESPACE="$2"
+    shift # past argument
+    shift # past value
+    ;;
     -n|--namespace)
     NAMESPACE="$2"
     shift # past argument
@@ -103,6 +109,7 @@ shw_grey "================================================"
 shw_grey " START_TIMESTAMP='$(date +%Y-%m-%dT%H:%M:%S%z)'"
 shw_grey "================================================"
 shw_grey " DESTINATION_PROVIDER=$DESTINATION_PROVIDER"
+shw_grey " DESTINATION_DBAAS_OPERATOR_NAMESPACE=$DESTINATION_DBAAS_OPERATOR_NAMESPACE"
 shw_grey " CONSUMER=$CONSUMER"
 shw_grey " NAMESPACE=$NAMESPACE"
 shw_grey "================================================"
@@ -144,7 +151,7 @@ shw_grey " DB_PORT=$DB_PORT"
 shw_grey "================================================"
 
 # Load the destination credentials from the dbaas-operator.
-PROVIDER=$(kubectl -n dbaas-operator get MariaDBProvider "$DESTINATION_PROVIDER" --output=json | jq '.spec')
+PROVIDER=$(kubectl -n "$DESTINATION_DBAAS_OPERATOR_NAMESPACE" get MariaDBProvider "$DESTINATION_PROVIDER" --output=json | jq '.spec')
 PROVIDER_ENVIRONMENT=$(echo "$PROVIDER" | jq -er '.environment')
 PROVIDER_USER=$(echo "$PROVIDER" | jq -er '.user')
 PROVIDER_PASSWORD=$(echo "$PROVIDER" | jq -er '.password')
