@@ -124,6 +124,10 @@ DB_PASSWORD=$(echo "$CONFIGMAP" | jq -er '.data.MARIADB_PASSWORD')
 DB_NAME=$(echo "$CONFIGMAP" | jq -er '.data.MARIADB_DATABASE')
 DB_NAME_LOWER=$(echo "$DB_NAME" | tr '[:upper:]' '[:lower:]')
 DB_PORT=$(echo "$CONFIGMAP" | jq -er '.data.MARIADB_PORT')
+LAGOON_PROJECT=$(echo "$CONFIGMAP" | jq -er '.data.LAGOON_PROJECT')
+LAGOON_ENVIRONMENT_TYPE=$(echo "$CONFIGMAP" | jq -er '.data.LAGOON_ENVIRONMENT_TYPE')
+LAGOON_GIT_BRANCH=$(echo "$CONFIGMAP" | jq -er '.data.LAGOON_GIT_BRANCH')
+LAGOON_GIT_SAFE_BRANCH=$(echo "$CONFIGMAP" | jq -er '.data.LAGOON_GIT_SAFE_BRANCH')
 
 shw_info "Project $NAMESPACE details:"
 shw_grey "================================================"
@@ -133,6 +137,10 @@ shw_grey " DB_USER=$DB_USER"
 shw_grey " DB_PASSWORD=$DB_PASSWORD"
 shw_grey " DB_NAME=$DB_NAME"
 shw_grey " DB_PORT=$DB_PORT"
+shw_grey " LAGOON_PROJECT=$LAGOON_PROJECT"
+shw_grey " LAGOON_ENVIRONMENT_TYPE=$LAGOON_ENVIRONMENT_TYPE"
+shw_grey " LAGOON_GIT_BRANCH=$LAGOON_GIT_BRANCH"
+shw_grey " LAGOON_GIT_SAFE_BRANCH=$LAGOON_GIT_SAFE_BRANCH"
 shw_grey "================================================"
 
 # Load the destination credentials from the dbaas-operator.
@@ -167,76 +175,118 @@ shw_grey "================================================"
 shw_grey " POD=$POD"
 shw_grey "================================================"
 
-# Ensure the destination has the schema and user created.
-shw_info "> Preparing Database, User, and permissions on destination"
-shw_info "================================================"
-CONF_FILE="/tmp/.my.cnf-$DESTINATION_PROVIDER"
-MIGRATE_FILE="/tmp/migrate.sh"
-kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "printf \"[client]\nhost=%s\nport=%s\nuser=%s\npassword='%s'\n\" '$PROVIDER_HOST' '$PROVIDER_PORT' '$PROVIDER_USER' '$PROVIDER_PASSWORD' > $CONF_FILE"
-cat << EOF > $MIGRATE_FILE
-#!/usr/bin/env bash
-set -euo pipefail
-echo "Creating database"
-mysql --defaults-file="$CONF_FILE" -se "CREATE DATABASE IF NOT EXISTS \\\`${DB_NAME}\\\`;"
-echo "Creating user"
-mysql --defaults-file="$CONF_FILE" -se "CREATE USER IF NOT EXISTS \\\`${DB_USER}\\\`@'%' IDENTIFIED BY '${DB_PASSWORD}';"
-echo "Grants"
-mysql --defaults-file="$CONF_FILE" -se "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, INDEX, ALTER, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, EVENT, TRIGGER ON \\\`${DB_NAME}\\\`.* TO \\\`${DB_USER}\\\`@'%';"
-echo "Flush"
-mysql --defaults-file="$CONF_FILE" -se "FLUSH PRIVILEGES;"
-echo "Verify access"
-mysql --defaults-file="$CONF_FILE" -se "SELECT * FROM mysql.db WHERE Db = '${DB_NAME_LOWER}'\\G;"
-EOF
-kubectl cp $MIGRATE_FILE $NAMESPACE/$POD:$MIGRATE_FILE
-kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "chmod 755 $MIGRATE_FILE";
-kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "$MIGRATE_FILE"
-
 # Dump the database inside the CLI pod.
 shw_info "> Dumping database $DB_NAME on pod $POD on host $DB_NETWORK_SERVICE"
 shw_info "================================================"
-kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "time mysqldump --max-allowed-packet=500M --events --routines --quick --add-locks --no-autocommit --single-transaction --no-create-db --no-tablespaces -h '$DB_NETWORK_SERVICE' -u '$DB_USER' -p'$DB_PASSWORD' '$DB_NAME' > /tmp/migration.sql"
-kubectl -n "$NAMESPACE" exec "$POD" -- ls -lh /tmp/migration.sql
-kubectl -n "$NAMESPACE" exec "$POD" -- head -n 5 /tmp/migration.sql
-kubectl -n "$NAMESPACE" exec "$POD" -- tail -n 5 /tmp/migration.sql
+kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "mkdir -p /app/\$WEBROOT/sites/default/files/private/"
+kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "time mysqldump --max-allowed-packet=500M --events --routines --quick --add-locks --no-autocommit --single-transaction --no-create-db --no-tablespaces -h '$DB_NETWORK_SERVICE' -u '$DB_USER' -p'$DB_PASSWORD' '$DB_NAME' > /app/\$WEBROOT/sites/default/files/private/migration.sql"
+kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "ls -lh /app/\$WEBROOT/sites/default/files/private/migration.sql"
+kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "head -n 5 /app/\$WEBROOT/sites/default/files/private/migration.sql"
+kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "tail -n 5 /app/\$WEBROOT/sites/default/files/private/migration.sql"
 shw_norm "> Dump is done"
 shw_norm "================================================"
 
-# Import to new database.
-shw_info "> Importing the dump into ${PROVIDER_HOST}"
+# Scale dbaas down.
+shw_info "> Scaling dbaas down, and delete MariaDBConsumer (without deleting the database)"
 shw_info "================================================"
-kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "time mysql --defaults-file='$CONF_FILE' '$DB_NAME' < /tmp/migration.sql"
-kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "rm /tmp/migration.sql && rm $MIGRATE_FILE && rm $CONF_FILE"
-shw_norm "> Import is done"
-shw_norm "================================================"
+shw_warn "scaling dbaas down"
+kubectl -n dbaas-operator scale deployment dbaas-operator --replicas=0 --timeout=2m
+shw_warn "patching MariaDBConsumer"
+kubectl -n "$NAMESPACE" patch MariaDBConsumer mariadb -p '{"metadata":{"finalizers":null}}' --type=merge
+shw_warn "deleting MariaDBConsumer"
+kubectl -n "$NAMESPACE" delete MariaDBConsumer mariadb
+shw_warn "scaling dbaas up"
+kubectl -n dbaas-operator scale deployment dbaas-operator --replicas=1 --timeout=2m
 
-# Alter the network service(s).
-shw_info "> Altering the Network Service $DB_NETWORK_SERVICE to point at $PROVIDER_HOST"
+# Create new consumer object.
+shw_info "> Create new MariaDBConsumer object"
 shw_info "================================================"
-ORIGINAL_DB_HOST=$(kubectl -n "$NAMESPACE" get "svc/$DB_NETWORK_SERVICE" -o json | tee "/tmp/$NAMESPACE-svc.json" | jq -er '.spec.externalName')
-if [ "$DRY_RUN" ] ; then
-  echo "**DRY RUN**"
-else
-  kubectl -n "$NAMESPACE" patch "svc/$DB_NETWORK_SERVICE" -p "{\"spec\":{\"externalName\": \"$PROVIDER_HOST\"}}"
-fi
-if [ "$DB_READREPLICA_HOSTS" ]; then
-  shw_info "> Altering the Network Service $DB_READREPLICA_HOSTS to point at $PROVIDER_REPLICA"
-  shw_info "================================================"
-  ORIGINAL_DB_READREPLICA_HOSTS=$(kubectl -n "$NAMESPACE" get "svc/$DB_READREPLICA_HOSTS" -o json | tee "/tmp/$NAMESPACE-svc-replica.json" | jq -er '.spec.externalName')
-  if [ "$DRY_RUN" ] ; then
-    echo "**DRY RUN**"
-  else
-    kubectl -n "$NAMESPACE" patch "svc/$DB_READREPLICA_HOSTS" -p "{\"spec\":{\"externalName\": \"$PROVIDER_REPLICA\"}}"
-  fi
-fi
+CONSUMER="/tmp/consumer.yaml"
+cat << EOF > $CONSUMER
+apiVersion: mariadb.amazee.io/v1
+kind: MariaDBConsumer
+metadata:
+  namespace: $NAMESPACE
+  name: mariadb
+  annotations:
+    lagoon.sh/branch: "$LAGOON_GIT_BRANCH"
+    lagoon.sh/version: "21.8.0"
+  labels:
+    app.kubernetes.io/instance: mariadb
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb-dbaas
+    helm.sh/chart: mariadb-dbaas-0.1.0
+    lagoon.sh/buildType: branch
+    lagoon.sh/environment: $LAGOON_GIT_BRANCH
+    lagoon.sh/environmentType: $LAGOON_ENVIRONMENT_TYPE
+    lagoon.sh/project: $LAGOON_PROJECT
+    lagoon.sh/service: mariadb
+    lagoon.sh/service-type: mariadb-dbaas
+spec:
+  environment: $DESTINATION_PROVIDER
+EOF
+kubectl -n "$NAMESPACE" apply -f $CONSUMER
+
+# Query the consumer, get the new credentials
+sleep 10
+shw_info "> See if the new database has been created."
+shw_info "================================================"
+NEW_DB_NAME=$(kubectl -n "$NAMESPACE" get MariaDBConsumer mariadb -o json | jq -r '.spec.consumer.database // empty')
+while [ -z "$NEW_DB_NAME" ]; do
+  shw_warn "No new database found in $NAMESPACE"
+  sleep 10
+  NEW_DB_NAME=$(kubectl -n "$NAMESPACE" get MariaDBConsumer mariadb -o json | jq -r '.spec.consumer.database // empty')
+done
+shw_info "> New database name ${NEW_DB_NAME}"
+
+# Allow the CLI pod to query the new database.
+shw_info "> Allow the CLI pod to query the new database"
+shw_info "================================================"
+CONF_FILE="/tmp/.my.cnf-$DESTINATION_PROVIDER"
+kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "printf \"[client]\nhost=%s\nport=%s\nuser=%s\npassword='%s'\n\" '$PROVIDER_HOST' '$PROVIDER_PORT' '$PROVIDER_USER' '$PROVIDER_PASSWORD' > $CONF_FILE"
+
+# Import the database dump into the new database.
+shw_info "> Importing the database dump into ${PROVIDER_HOST}."
+shw_info "================================================"
+kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "time mysql --defaults-file='$CONF_FILE' '$NEW_DB_NAME' < /app/\$WEBROOT/sites/default/files/private/migration.sql"
+
+# Create the ENV VAR to tell dbaas about the correct provider.
+shw_info "> Create the ENV VAR to tell dbaas about the correct provider"
+shw_info "================================================"
+lagoon -l amazeeio add variable -p $LAGOON_PROJECT -e "$LAGOON_GIT_BRANCH" --name LAGOON_DBAAS_ENVIRONMENT_TYPES --scope global --value "mariadb:${DESTINATION_PROVIDER}"
+
+# Deploy the project.
+shw_info "> Deploy the project"
+shw_info "================================================"
+lagoon -l amazeeio deploy latest -p $LAGOON_PROJECT -e "$LAGOON_GIT_BRANCH" --force
+
+
+# lagoon list deployments -p $LAGOON_PROJECT -e "$LAGOON_GIT_BRANCH" --no-header | head
 
 # Unsure what if any delay there is in this to take effect, but 1 second sounds
 # completely reasonable.
-sleep 1
+shw_info "> Waiting for 5 minutes."
+sleep 300
+
+# Find the CLI pod
+POD=$(kubectl -n "$NAMESPACE" get pods -o json --field-selector=status.phase=Running -l lagoon.sh/service=cli | jq -r '.items[0].metadata.name // empty')
+if [ -z "$POD" ]; then
+  shw_warn "No running cli pod in namespace $NAMESPACE"
+  shw_warn "Scaling up 1 CLI pod"
+  kubectl -n "$NAMESPACE" scale deployment cli --current-replicas=0 --replicas=1 --timeout=2m
+  sleep 32 # hope for timely scheduling
+  POD=$(kubectl -n "$NAMESPACE" get pods -o json --field-selector=status.phase=Running -l lagoon.sh/service=cli | jq -er '.items[0].metadata.name')
+fi
+
+shw_info "CLI pod details:"
+shw_grey "================================================"
+shw_grey " POD=$POD"
+shw_grey "================================================"
 
 # Verify the correct RDS cluster.
-#shw_info "> Output the Database cluster that Drush is connecting to"
-#shw_info "================================================"
-#kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "drush sqlq 'SELECT @@aurora_server_id;'"
+shw_info "> Output the Database cluster that Drush is connecting to"
+shw_info "================================================"
+kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "drush sqlq 'SELECT @@aurora_server_id;'"
 
 # Drush status.
 shw_info "> Drush status"
@@ -250,15 +300,6 @@ shw_info "================================================"
 curl -skLIXGET "https://${ROUTE}/?${TIMESTAMP}" \
   -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36" \
   --cookie "NO_CACHE=1" | grep -iE "HTTP|Cache|Location|LAGOON" || true
-
-shw_grey "================================================"
-shw_grey ""
-shw_grey "In order to rollback this change, edit the Network Service(s) like so:"
-shw_grey ""
-shw_grey "kubectl -n $NAMESPACE patch svc/$DB_NETWORK_SERVICE -p '{\"spec\":{\"externalName\": \"$ORIGINAL_DB_HOST\"}}'"
-if [ "$DB_READREPLICA_HOSTS" ]; then
-  shw_grey "kubectl -n $NAMESPACE patch svc/$DB_READREPLICA_HOSTS -p '{\"spec\":{\"externalName\": \"$ORIGINAL_DB_READREPLICA_HOSTS\"}}'"
-fi
 
 echo ""
 shw_grey "================================================"
