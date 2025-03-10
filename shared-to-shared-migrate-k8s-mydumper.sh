@@ -126,19 +126,25 @@ if [ "$DRY_RUN" ] ; then
 fi
 
 # Load the existing DBaaS credentials for the project.
-CONFIGMAP=$(kubectl -n "$NAMESPACE" get configmap lagoon-env --output=json)
 
-DB_NETWORK_SERVICE=$(echo "$CONFIGMAP" | jq -er '.data.MARIADB_HOST')
-if echo "$CONFIGMAP" | grep -q MARIADB_READREPLICA_HOSTS ; then
-  DB_READREPLICA_HOSTS=$(echo "$CONFIGMAP" | jq -er '.data.MARIADB_READREPLICA_HOSTS')
+# check for secret or configmap
+if kubectl -n "$NAMESPACE" get secret lagoon-env &> /dev/null; then
+  LAGOONENV=$(kubectl -n "$NAMESPACE" get secret lagoon-env --output=json | jq -cr '.data | map_values(@base64d)')
+else
+  LAGOONENV=$(kubectl -n "$NAMESPACE" get configmap lagoon-env --output=json | jq -cr '.data')
+fi
+
+DB_NETWORK_SERVICE=$(echo "$LAGOONENV" | jq -er '.MARIADB_HOST')
+if echo "$LAGOONENV" | grep -q MARIADB_READREPLICA_HOSTS ; then
+  DB_READREPLICA_HOSTS=$(echo "$LAGOONENV" | jq -er '.MARIADB_READREPLICA_HOSTS')
 else
   DB_READREPLICA_HOSTS=""
 fi
-DB_USER=$(echo "$CONFIGMAP" | jq -er '.data.MARIADB_USERNAME')
-DB_PASSWORD=$(echo "$CONFIGMAP" | jq -er '.data.MARIADB_PASSWORD')
-DB_NAME=$(echo "$CONFIGMAP" | jq -er '.data.MARIADB_DATABASE')
+DB_USER=$(echo "$LAGOONENV" | jq -er '.MARIADB_USERNAME')
+DB_PASSWORD=$(echo "$LAGOONENV" | jq -er '.MARIADB_PASSWORD')
+DB_NAME=$(echo "$LAGOONENV" | jq -er '.MARIADB_DATABASE')
 DB_NAME_LOWER=$(echo "$DB_NAME" | tr '[:upper:]' '[:lower:]')
-DB_PORT=$(echo "$CONFIGMAP" | jq -er '.data.MARIADB_PORT')
+DB_PORT=$(echo "$LAGOONENV" | jq -er '.MARIADB_PORT')
 
 shw_info "Project $NAMESPACE details:"
 shw_grey "================================================"
