@@ -6,8 +6,11 @@
 # This script will migrate a database user, access, database and contents from
 # an existing cluster to a destination cluster.
 #
-# At the moment, this is geared towards the DBaaS, and does not support the
-# Ansible Service Broker.
+# At the moment, this is geared towards the DBaaS Operator v1
+# @see https://github.com/amazeeio/dbaas-operator
+#
+# In the future this will likely need to be rewritten for
+# @see https://github.com/uselagoon/dbaas-controller
 #
 # It has been used successfully to migrate databases between Azure MariaDB clusters.
 #
@@ -212,14 +215,14 @@ kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "$MIGRATE_FILE"
 # Dump the database inside the CLI pod.
 shw_info "> Dumping database $DB_NAME on pod $POD on host $DB_NETWORK_SERVICE"
 shw_info "================================================"
-kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "mydumper -h '$DB_NETWORK_SERVICE' -u '$DB_USER' -p '$DB_PASSWORD' -B '$DB_NAME' --verbose 3 --outputdir /tmp/mydumper --lock-all-tables"
+kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "mydumper -h '$DB_NETWORK_SERVICE' -u '$DB_USER' -p '$DB_PASSWORD' -B '$DB_NAME' --verbose 2 --outputdir /tmp/mydumper --lock-all-tables"
 shw_norm "> Dump is done"
 shw_norm "================================================"
 
 # Import to new database.
 shw_info "> Importing the dump into ${PROVIDER_HOST}"
 shw_info "================================================"
-kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "time myloader -h '$PROVIDER_HOST' -u '$DB_USER' -p '$DB_PASSWORD' -B '$DB_NAME' --verbose 3 -d /tmp/mydumper --overwrite-tables"
+kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "time myloader -h '$PROVIDER_HOST' -u '$DB_USER' -p '$DB_PASSWORD' -B '$DB_NAME' --verbose 2 -d /tmp/mydumper --overwrite-tables"
 kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "rm -rf /tmp/mydumper && rm $MIGRATE_FILE && rm $CONF_FILE"
 shw_norm "> Import is done"
 shw_norm "================================================"

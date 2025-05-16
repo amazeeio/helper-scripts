@@ -6,8 +6,11 @@
 # This script will migrate a database user, access, database and contents from
 # an existing cluster to a destination cluster.
 #
-# At the moment, this is geared towards the DBaaS, and does not support the
-# Ansible Service Broker.
+# At the moment, this is geared towards the DBaaS Operator v1
+# @see https://github.com/amazeeio/dbaas-operator
+#
+# In the future this will likely need to be rewritten for
+# @see https://github.com/uselagoon/dbaas-controller
 #
 # It has been used successfully to migrate databases between Azure MariaDB clusters.
 #
