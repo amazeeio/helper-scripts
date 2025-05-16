@@ -114,7 +114,7 @@ shw_grey " CONSUMER=$CONSUMER"
 shw_grey " NAMESPACE=$NAMESPACE"
 shw_grey "================================================"
 
-for util in kubectl jq mysql; do
+for util in kubectl jq; do
 	if ! command -v ${util} > /dev/null; then
 		shw_err "Please install ${util}"
 		exit 1
