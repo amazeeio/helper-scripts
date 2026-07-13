@@ -223,8 +223,21 @@ shw_norm "================================================"
 shw_info "> Importing the dump into ${PROVIDER_HOST}"
 shw_info "================================================"
 kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "time myloader -h '$PROVIDER_HOST' -u '$DB_USER' -p '$DB_PASSWORD' -B '$DB_NAME' --verbose 2 -d /tmp/mydumper --overwrite-tables"
-kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "rm -rf /tmp/mydumper && rm $MIGRATE_FILE && rm $CONF_FILE"
 shw_norm "> Import is done"
+shw_norm "================================================"
+
+# Analyze imported database.
+shw_info "> Analyzing imported database ${DB_NAME}"
+shw_info "================================================"
+kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "time mysqlcheck -h '$PROVIDER_HOST' -u '$DB_USER' -p'$DB_PASSWORD' --analyze '$DB_NAME'"
+shw_norm "> Analyze is done"
+shw_norm "================================================"
+
+# Clean up temporary files.
+shw_info "> Cleaning up temporary migration files"
+shw_info "================================================"
+kubectl -n "$NAMESPACE" exec "$POD" -- bash -c "rm -rf /tmp/mydumper && rm $MIGRATE_FILE && rm $CONF_FILE"
+shw_norm "> Cleanup is done"
 shw_norm "================================================"
 
 # Alter the network service(s).
